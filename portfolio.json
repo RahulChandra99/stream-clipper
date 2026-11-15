@@ -1,0 +1,16 @@
+{
+  "category": "tools",
+  "items": [
+    {
+      "title": "stream-clipper",
+      "summary": "Finds the best moments in a long stream and renders them as vertical clips with captions.",
+      "highlights": [
+        "Ranks moments by loudness, YouTube chat speed and a local Whisper transcript",
+        "Claude picks the final clips and writes the titles through the claude CLI, no API key",
+        "Detects the facecam and stacks it over the gameplay"
+      ],
+      "tags": ["Python", "ffmpeg", "faster-whisper", "yt-dlp", "OpenCV"],
+      "status": "hidden"
+    }
+  ]
+}
