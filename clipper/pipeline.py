@@ -14,7 +14,7 @@ PAD = 12.0  # extra seconds downloaded each side so trims don't need a new downl
 
 CLIP_DEFAULTS = {"style": "bold", "layout": "auto", "title_mode": "always",
                  "progress_bar": False, "music": None, "music_vol": 0.15,
-                 "vo_text": "", "vo_voice": tts.DEFAULT_VOICE, "vo_start": 0.0,
+                 "vo_text": "", "vo_voice": None, "vo_start": 0.0,
                  "vo_vol": 1.0, "vo_duck": 0.2, "vo_captions": True}
 
 
@@ -116,7 +116,7 @@ def voiceover(clip: dict, clip_len: float) -> dict | None:
     text = (clip.get("vo_text") or "").strip()
     if not text:
         return None
-    wav = tts.synthesize(text, clip.get("vo_voice") or tts.DEFAULT_VOICE, WORK / "voice")
+    wav = tts.synthesize(text, clip.get("vo_voice") or tts.default_voice(), WORK / "voice")
     start = min(max(0.0, float(clip.get("vo_start", 0))), max(0.0, clip_len - 1))
     length = min(tts.duration(wav), clip_len - start)
     return {"file": wav, "start": start, "length": length, "text": text,
@@ -127,7 +127,9 @@ def captions_with_voiceover(words: list[dict], vo: dict) -> list[dict]:
     """Swap the streamer's captions for the voiceover's words while the voice speaks."""
     a, b = vo["start"], vo["start"] + vo["length"]
     kept = [w for w in words if w["end"] <= a or w["start"] >= b]
-    return sorted(kept + tts.spread_words(vo["text"], a, vo["length"]), key=lambda w: w["start"])
+    spoken = [{"word": w["word"], "start": w["start"] + a, "end": w["end"] + a}
+              for w in tts.word_times(vo["file"], vo["text"]) if w["start"] < vo["length"]]
+    return sorted(kept + spoken, key=lambda w: w["start"])
 
 
 def render_clip(meta: dict, clip: dict, all_words: list[dict], out: Path,

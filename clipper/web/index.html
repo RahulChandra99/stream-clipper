@@ -468,14 +468,16 @@ function voicePane(c, field, sel) {
   const caps = el("input", { type: "checkbox", checked: c.vo_captions !== false });
   caps.onchange = () => patch({ vo_captions: caps.checked });
 
-  if (!config.voices.length) return el("div", { class: "pane" }, el("p", { class: "note" }, "Voiceover uses the voices built into macOS, and none were found."));
+  if (!config.voices.length) return el("div", { class: "pane" }, el("p", { class: "note" }, "No voices found. See the README, Voices."));
   return el("div", { class: "pane" },
     field("What the voice says", text), info,
     el("div", { class: "row" }, field("Voice", voice), listen),
     el("div", { class: "row" }, field("Starts at (seconds into the clip)", at), field("Voice volume", range("vo_vol", "0.4", "2", 1))),
     field("Original audio while the voice speaks (left is silent, right is full)", range("vo_duck", "0", "1", 0.2)),
     el("label", { class: "check" }, caps, "Show the voiceover's words as captions"),
-    el("p", { class: "note", style: "margin-top:14px" }, "These are the voices built into your Mac. Better ones are free in System Settings, Accessibility, Spoken Content, System Voice, Manage Voices. Pick a Premium or Enhanced voice and it shows up here."));
+    el("p", { class: "note", style: "margin-top:14px" }, config.voices.some(v => v.id.startsWith("kokoro:"))
+      ? "The named voices run on this Mac with the Kokoro model. Nothing you type leaves your computer. The ones marked Mac are the older built-in voices."
+      : "These are the voices built into your Mac. For natural ones, install the Kokoro model (see the README, Voices) and restart the app."));
 }
 
 function syncEditor() {

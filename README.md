@@ -37,7 +37,19 @@ python3 -m venv .venv
 
 Music is whatever you put in the `music/` folder. It loops under the clip and ducks while someone is talking. Only use tracks you have the rights to. The YouTube Audio Library is free.
 
-Voiceover is on its own tab. Type what you want said, pick a voice, press Listen to hear it, then render. The original audio drops while the voice speaks, and the voice's words replace the captions for that stretch. It uses the voices built into macOS, so it's free and offline. They sound a bit robotic. Better ones are a free download in System Settings, Accessibility, Spoken Content, Manage Voices, and they show up in the app once installed.
+Voiceover is on its own tab. Type what you want said, pick a voice, press Listen to hear it, then render. The original audio drops while the voice speaks, and the voice's words replace the captions for that stretch, timed to each spoken word.
+
+### Voices
+
+The good voices come from Kokoro, a small neural speech model that runs on your Mac. Nothing you type is sent anywhere. It needs two files, about 350 MB, that aren't in this repo:
+
+```bash
+mkdir -p models && cd models
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx
+curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin
+```
+
+Without them the app falls back to the voices built into macOS, which work but sound like a screen reader.
 
 Caption styles are Bold Pop, Neon, Karaoke Box, Minimal, Lower Third, or none.
 
