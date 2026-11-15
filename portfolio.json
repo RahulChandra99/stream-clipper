@@ -7,9 +7,9 @@
       "highlights": [
         "Ranks moments by loudness, YouTube chat speed and a local Whisper transcript",
         "Claude picks the final clips and writes the titles through the claude CLI, no API key",
-        "Detects the facecam and stacks it over the gameplay"
+        "Local web app to edit titles, captions, layout and music, then hand off to YouTube, Instagram or a phone"
       ],
-      "tags": ["Python", "ffmpeg", "faster-whisper", "yt-dlp", "OpenCV"],
+      "tags": ["Python", "ffmpeg", "faster-whisper", "yt-dlp", "OpenCV", "FastAPI"],
       "status": "hidden"
     }
   ]

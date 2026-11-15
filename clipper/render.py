@@ -18,11 +18,30 @@ FONT_PATHS = ["/System/Library/Fonts/Supplemental/Impact.ttf",
               "/System/Library/Fonts/Supplemental/Arial Black.ttf",
               "C:/Windows/Fonts/impact.ttf",
               "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
+SANS_PATHS = ["/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+              "C:/Windows/Fonts/arialbd.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
 YELLOW, WHITE, BLACK = (255, 230, 0), (255, 255, 255), (0, 0, 0)
 
+# Caption presets. y is the vertical centre as a fraction of the frame height,
+# None means "on the seam" for the stacked layout and 0.68 otherwise.
+STYLES = {
+    "bold":    {"label": "Bold Pop", "face": "impact", "size": 92, "stroke": 8, "words": 3,
+                "fill": WHITE, "active": YELLOW, "outline": BLACK, "upper": True, "y": None},
+    "neon":    {"label": "Neon", "face": "impact", "size": 88, "stroke": 8, "words": 3,
+                "fill": WHITE, "active": (0, 255, 220), "outline": (45, 0, 90), "upper": True, "y": None},
+    "box":     {"label": "Karaoke Box", "face": "sans", "size": 72, "stroke": 5, "words": 3,
+                "fill": WHITE, "active": WHITE, "outline": BLACK, "box": (255, 60, 90), "y": None},
+    "minimal": {"label": "Minimal", "face": "sans", "size": 60, "stroke": 4, "words": 5,
+                "fill": WHITE, "active": WHITE, "outline": BLACK, "y": None},
+    "lower":   {"label": "Lower Third", "face": "sans", "size": 50, "stroke": 4, "words": 6,
+                "fill": WHITE, "active": YELLOW, "outline": BLACK, "y": 0.86},
+    "none":    {"label": "No captions"},
+}
 
-def font(size: int) -> ImageFont.FreeTypeFont:
-    for p in FONT_PATHS:
+
+def font(size: int, face: str = "impact") -> ImageFont.FreeTypeFont:
+    for p in (SANS_PATHS if face == "sans" else FONT_PATHS):
         if Path(p).exists():
             return ImageFont.truetype(p, size)
     return ImageFont.load_default(size)
@@ -34,20 +53,23 @@ def even(x: float) -> int:
 
 # ---------- layout ----------
 
-def find_face(src: Path) -> tuple[tuple[int, int, int, int] | None, int, int]:
+def find_face(src: Path, ss: float = 0.0, dur: float | None = None
+              ) -> tuple[tuple[int, int, int, int] | None, int, int]:
     """Look for a face that stays in the same place, which is what a facecam is.
 
     Returns ((x, y, w, h) or None, frame_width, frame_height).
     """
     cap = cv2.VideoCapture(str(src))
     fw, fh = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    first = int(ss * src_fps)
+    total = int(dur * src_fps) if dur else int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) - first
     cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
     samples = 15
     buckets: dict[tuple[int, int], list] = {}
     for i in range(samples):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (i + 0.5) / samples))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, first + int(total * (i + 0.5) / samples))
         ok, frame = cap.read()
         if not ok:
             continue
@@ -132,21 +154,29 @@ def wrap(words: list[str], f: ImageFont.FreeTypeFont, max_w: int) -> list[list[i
     return lines
 
 
-def caption_image(words: list[str], active: int) -> Image.Image:
-    f, stroke, pad = font(92), 8, 16
+def caption_image(words: list[str], active: int, st: dict) -> Image.Image:
+    if st.get("upper"):
+        words = [w.upper() for w in words]
+    f, stroke, pad = font(st["size"], st["face"]), st["stroke"], 18
     lines = wrap(words, f, W - 140)
     space = f.getlength(" ")
-    line_h = f.size + 18
+    line_h = f.size + 22
     width = int(max(f.getlength(" ".join(words[i] for i in ln)) for ln in lines)) + 2 * (pad + stroke)
     img = Image.new("RGBA", (width, line_h * len(lines) + 2 * pad), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     for row, ln in enumerate(lines):
         x = (width - f.getlength(" ".join(words[i] for i in ln))) / 2
+        y = pad + row * line_h
         for i in ln:
-            d.text((x, pad + row * line_h), words[i], font=f,
-                   fill=YELLOW if i == active else WHITE,
-                   stroke_width=stroke, stroke_fill=BLACK)
-            x += f.getlength(words[i]) + space
+            wlen = f.getlength(words[i])
+            if i == active and "box" in st:
+                d.rounded_rectangle((x - 12, y - 4, x + wlen + 12, y + f.size + 14),
+                                    radius=16, fill=st["box"])
+            d.text((x, y), words[i], font=f,
+                   fill=st["active"] if i == active else st["fill"],
+                   stroke_width=0 if (i == active and "box" in st) else stroke,
+                   stroke_fill=st["outline"])
+            x += wlen + space
     return img
 
 
@@ -186,30 +216,54 @@ def caption_chunks(words: list[dict], max_words: int = 3) -> list[list[dict]]:
 
 # ---------- render ----------
 
+def audio_args(music: Path | None, music_vol: float) -> list[str]:
+    """Map the clip audio, mixing in looped music that ducks under speech."""
+    if not music:
+        return ["-map", "1:a?"]
+    graph = (f"[1:a]asplit=2[voice][key];"
+             f"[2:a]volume={music_vol:.2f}[m];"
+             f"[m][key]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=350[duck];"
+             f"[voice][duck]amix=inputs=2:duration=first:normalize=0[a]")
+    return ["-filter_complex", graph, "-map", "[a]"]
+
+
 def render(src: Path, out: Path, words: list[dict], title: str, credit: str,
-           layout: str = "auto") -> str:
-    """words have times relative to the start of `src`. Returns the layout used."""
-    face, fw, fh = find_face(src)
+           layout: str = "auto", *, ss: float = 0.0, dur: float | None = None,
+           style: str = "bold", title_mode: str = "always", progress_bar: bool = False,
+           music: Path | None = None, music_vol: float = 0.15, on_progress=None) -> str:
+    """Render [ss, ss+dur] of `src` as a vertical clip.
+
+    words have times relative to the start of the clip (not of `src`).
+    title_mode is "always", "intro" (first 3 seconds) or "off".
+    Returns the layout used.
+    """
+    face, fw, fh = find_face(src, ss, dur)
     graph, used = layout_filter(layout, face, fw, fh)
-    caption_y = TOP_H if used == "stack" else int(H * 0.68)
+    st = STYLES.get(style, STYLES["bold"])
+    y_frac = st.get("y")
+    caption_y = int(H * y_frac) if y_frac else (TOP_H if used == "stack" else int(H * 0.68))
 
-    static = [Overlay(title_image(title), W // 2, 190),
-              Overlay(credit_image(credit), W // 2, H - 90)]
-    chunks = caption_chunks(words)
+    title_ov = Overlay(title_image(title), W // 2, 190) if title and title_mode != "off" else None
+    credit_ov = Overlay(credit_image(credit), W // 2, H - 90) if credit else None
+    chunks = caption_chunks(words, st["words"]) if "size" in st else []
     cache: dict[tuple[int, int], Overlay] = {}
+    bar_color = np.array(st.get("box") or st.get("active") or YELLOW, dtype=np.uint8)
 
+    seek = ["-ss", f"{ss:.3f}"] + (["-t", f"{dur:.3f}"] if dur else [])
     decode = subprocess.Popen(
-        ["ffmpeg", "-loglevel", "error", "-i", str(src), "-filter_complex", graph,
+        ["ffmpeg", "-loglevel", "error", *seek, "-i", str(src), "-filter_complex", graph,
          "-map", "[v]", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
         stdout=subprocess.PIPE)
+    music_in = ["-stream_loop", "-1", "-i", str(music)] if music else []
     encode = subprocess.Popen(
         ["ffmpeg", "-y", "-loglevel", "error",
          "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
-         "-i", str(src), "-map", "0:v", "-map", "1:a?",
+         *seek, "-i", str(src), *music_in, "-map", "0:v", *audio_args(music, music_vol),
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", str(out)],
         stdin=subprocess.PIPE)
 
+    total = max(1, int((dur or 60) * FPS))
     size, n, ci = W * H * 3, 0, 0
     while True:
         buf = decode.stdout.read(size)
@@ -225,14 +279,20 @@ def render(src: Path, out: Path, words: list[dict], title: str, credit: str,
             active = max((i for i, w in enumerate(chunk) if w["start"] <= t), default=0)
             key = (ci, active)
             if key not in cache:
-                cache[key] = Overlay(caption_image([w["word"] for w in chunk], active),
+                cache[key] = Overlay(caption_image([w["word"] for w in chunk], active, st),
                                      W // 2, caption_y)
             cache[key].draw(frame)
-        for o in static:
-            o.draw(frame)
+        if title_ov and (title_mode == "always" or t < 3.0):
+            title_ov.draw(frame)
+        if credit_ov:
+            credit_ov.draw(frame)
+        if progress_bar:
+            frame[H - 14:, : int(W * min(1.0, n / total))] = bar_color
 
         encode.stdin.write(frame.tobytes())
         n += 1
+        if on_progress and n % 30 == 0:
+            on_progress(min(1.0, n / total))
 
     encode.stdin.close()
     decode.wait()

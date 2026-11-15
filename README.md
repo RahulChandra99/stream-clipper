@@ -18,30 +18,42 @@ Three layouts. A small face that stays in one corner is treated as a facecam and
 
 Needs Python 3.10+ and ffmpeg (`brew install ffmpeg`).
 
+Double-click `Clipper.command` in Finder. The first run installs everything, then the app opens in your browser at http://127.0.0.1:8787.
+
+Or from a terminal:
+
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m clipper "https://www.youtube.com/watch?v=VIDEO_ID"
+.venv/bin/python -m clipper.app
 ```
 
-Clips land in `out/<video id>/` as `clip_01.mp4` with a matching `clip_01.txt` holding the title, a caption and a credit link back to the exact timestamp.
+## Using the app
 
-Useful flags:
+1. Paste a YouTube, Twitch or Kick link, or drop a video file. Pick how many clips, how long, and a caption style.
+2. Wait. The page shows each stage. Clips appear as they finish rendering.
+3. Edit a clip if it needs it. Change the hook title, nudge the start and end, switch layout or caption style, fix a mistranscribed word, add music, then hit Render changes.
+4. Post. Each platform button copies the description, selects the file in Finder and opens that platform's upload page. Send to phone shows a QR code that downloads the clip on your phone over Wi-Fi, which is the easiest way to post a Reel.
 
-```
---top 5               how many clips
---min 20 --max 50     clip length in seconds
---picker heuristic    no Claude, fully offline
---transcribe full     transcribe everything, slower and better on long streams
---layout stack        force facecam on top (also: crop, blur)
---credit "@name"      text shown at the bottom of the clip
-```
+Music is whatever you put in the `music/` folder. It loops under the clip and ducks while someone is talking. Only use tracks you have the rights to. The YouTube Audio Library is free.
 
-It also takes a local file, which is the route for your own gameplay recordings:
+Caption styles are Bold Pop, Neon, Karaoke Box, Minimal, Lower Third, or none.
+
+There's still a command line version:
 
 ```bash
-.venv/bin/python -m clipper ~/Movies/my-gta6-session.mp4 --credit "@mychannel"
+.venv/bin/python -m clipper "https://www.youtube.com/watch?v=VIDEO_ID" --top 5 --style neon
 ```
+
+## Why posting isn't one click
+
+YouTube locks videos uploaded through an unverified API project to private, and getting a project verified means an audit. Instagram's API only takes a video from a public URL and needs a business account and a Meta app. For a tool only I use, neither is worth it yet, so the app does everything up to the upload and hands over. If that changes, the YouTube Data API is the first one to add.
+
+## What it is and isn't
+
+A local app for one person. It listens on 127.0.0.1 only. Projects are JSON files in `projects/`, jobs run one at a time on a background thread. No database, no accounts, no cloud storage. The one exception to local-only is Send to phone, which starts a second tiny server on the LAN that serves a single file behind a random token for ten minutes.
+
+Left out on purpose for now: speaker diarization, jump cuts, b-roll, zoom punch-ins, scheduling, and a live canvas preview. Edits need a re-render, which takes about 15 seconds for a 50 second clip.
 
 ## Before you post
 
@@ -53,9 +65,9 @@ YouTube won't monetize channels made of other people's footage with nothing adde
 
 ## What's tested and what isn't
 
-Tested on an 11 minute YouTube video on an M-series Mac: 59 seconds end to end for two clips with the offline picker, 103 seconds with Claude ranking. The full and peaks transcription modes and the blur layout all ran clean.
+Tested on an 11 minute YouTube video on an M-series Mac. From the command line, two clips took 59 seconds with the offline picker and 103 seconds with Claude ranking. In the app I ran a link through to three rendered clips, edited one (title, style, progress bar) and re-rendered it, mixed in a test music track, uploaded a file, and generated the phone QR code.
 
-Not yet tested on a real multi-hour stream with a facecam, so the stacked layout and the chat signal have only been exercised in code, not on real footage. Twitch and Kick should download through yt-dlp but get no chat signal.
+Not tested yet: a real multi-hour stream with a facecam, so the stacked layout and the chat signal have only run in code. Twitch and Kick links. Actually scanning the QR code from a phone. The platform buttons open the upload pages but I haven't posted anything with them.
 
 ## Built with Claude Code
 
