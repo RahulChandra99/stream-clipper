@@ -24,6 +24,14 @@ A running log. What Claude generated, what was wrong with it, how it was caught,
 
 **Caption edits don't cut the video.** Clearing a word hides its caption only. The spec wanted transcript editing that removes the audio too. Not built.
 
+## 2026-11-15, voiceover
+
+**The voice is the Mac's built-in one, not a neural model.** Claude used the `say` command because it needed no download or API key. It works, but it sounds like a screen reader. A local neural model (Kokoro, Piper) or ElevenLabs would sound far better. `tts.synthesize` is the only function to replace.
+
+**Voiceover caption timing is a guess.** `say` gives no word timestamps, so each word gets a share of the time based on its length. The highlighted word can drift from the spoken one on long sentences.
+
+**A test script broke on a library mismatch.** Passing a file path to faster-whisper failed with "open() got an unexpected keyword argument 'metadata_errors'", a version mismatch between faster-whisper and PyAV. The app was never affected because it hands Whisper raw audio samples, but anything that passes a path will hit it.
+
 ## Mine to write
 
 `score_window` in `clipper/pick.py`. The weights in there are guesses. Nobody has checked them against clips that actually did well.

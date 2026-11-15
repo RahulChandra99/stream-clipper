@@ -216,21 +216,39 @@ def caption_chunks(words: list[dict], max_words: int = 3) -> list[list[dict]]:
 
 # ---------- render ----------
 
-def audio_args(music: Path | None, music_vol: float) -> list[str]:
-    """Map the clip audio, mixing in looped music that ducks under speech."""
-    if not music:
-        return ["-map", "1:a?"]
-    graph = (f"[1:a]asplit=2[voice][key];"
-             f"[2:a]volume={music_vol:.2f}[m];"
-             f"[m][key]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=350[duck];"
-             f"[voice][duck]amix=inputs=2:duration=first:normalize=0[a]")
-    return ["-filter_complex", graph, "-map", "[a]"]
+def audio_args(music: Path | None, music_vol: float, vo: dict | None) -> tuple[list[str], list[str]]:
+    """Build the audio side of the encode command. Returns (extra inputs, filter and map args).
+
+    Input 1 is the clip's own audio. A voiceover lowers it while the voice speaks.
+    Music loops underneath and ducks under whatever speech is playing.
+    vo is {"file", "start", "length", "vol", "duck"}.
+    """
+    if not music and not vo:
+        return [], ["-map", "1:a?"]
+    inputs, parts, n = [], [], 2
+    speech = "1:a"
+    if vo:
+        inputs += ["-i", str(vo["file"])]
+        a, b = vo["start"], vo["start"] + vo["length"]
+        parts += [f"[1:a]volume={vo['duck']:.2f}:enable='between(t,{a:.2f},{b:.2f})'[orig]",
+                  f"[{n}:a]adelay={int(a * 1000)}:all=1,volume={vo['vol']:.2f}[vo]",
+                  "[orig][vo]amix=inputs=2:duration=first:normalize=0[speech]"]
+        speech, n = "speech", n + 1
+    if music:
+        inputs += ["-stream_loop", "-1", "-i", str(music)]
+        parts += [f"[{speech}]asplit=2[voice][key]",
+                  f"[{n}:a]volume={music_vol:.2f}[m]",
+                  "[m][key]sidechaincompress=threshold=0.02:ratio=10:attack=15:release=350[duck]",
+                  "[voice][duck]amix=inputs=2:duration=first:normalize=0[a]"]
+        speech = "a"
+    return inputs, ["-filter_complex", ";".join(parts), "-map", f"[{speech}]"]
 
 
 def render(src: Path, out: Path, words: list[dict], title: str, credit: str,
            layout: str = "auto", *, ss: float = 0.0, dur: float | None = None,
            style: str = "bold", title_mode: str = "always", progress_bar: bool = False,
-           music: Path | None = None, music_vol: float = 0.15, on_progress=None) -> str:
+           music: Path | None = None, music_vol: float = 0.15, vo: dict | None = None,
+           on_progress=None) -> str:
     """Render [ss, ss+dur] of `src` as a vertical clip.
 
     words have times relative to the start of the clip (not of `src`).
@@ -254,11 +272,11 @@ def render(src: Path, out: Path, words: list[dict], title: str, credit: str,
         ["ffmpeg", "-loglevel", "error", *seek, "-i", str(src), "-filter_complex", graph,
          "-map", "[v]", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
         stdout=subprocess.PIPE)
-    music_in = ["-stream_loop", "-1", "-i", str(music)] if music else []
+    audio_in, audio_map = audio_args(music, music_vol, vo)
     encode = subprocess.Popen(
         ["ffmpeg", "-y", "-loglevel", "error",
          "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-",
-         *seek, "-i", str(src), *music_in, "-map", "0:v", *audio_args(music, music_vol),
+         *seek, "-i", str(src), *audio_in, "-map", "0:v", *audio_map,
          "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
          "-c:a", "aac", "-b:a", "160k", "-shortest", "-movflags", "+faststart", str(out)],
         stdin=subprocess.PIPE)

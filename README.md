@@ -37,6 +37,8 @@ python3 -m venv .venv
 
 Music is whatever you put in the `music/` folder. It loops under the clip and ducks while someone is talking. Only use tracks you have the rights to. The YouTube Audio Library is free.
 
+Voiceover is on its own tab. Type what you want said, pick a voice, press Listen to hear it, then render. The original audio drops while the voice speaks, and the voice's words replace the captions for that stretch. It uses the voices built into macOS, so it's free and offline. They sound a bit robotic. Better ones are a free download in System Settings, Accessibility, Spoken Content, Manage Voices, and they show up in the app once installed.
+
 Caption styles are Bold Pop, Neon, Karaoke Box, Minimal, Lower Third, or none.
 
 There's still a command line version:
@@ -65,7 +67,7 @@ YouTube won't monetize channels made of other people's footage with nothing adde
 
 ## What's tested and what isn't
 
-Tested on an 11 minute YouTube video on an M-series Mac. From the command line, two clips took 59 seconds with the offline picker and 103 seconds with Claude ranking. In the app I ran a link through to three rendered clips, edited one (title, style, progress bar) and re-rendered it, mixed in a test music track, uploaded a file, and generated the phone QR code.
+Tested on an 11 minute YouTube video on an M-series Mac. From the command line, two clips took 59 seconds with the offline picker and 103 seconds with Claude ranking. In the app I ran a link through to three rendered clips, edited one (title, style, progress bar) and re-rendered it, mixed in a test music track, uploaded a file, generated the phone QR code, and added a typed voiceover that I confirmed by transcribing the rendered clip.
 
 Not tested yet: a real multi-hour stream with a facecam, so the stacked layout and the chat signal have only run in code. Twitch and Kick links. Actually scanning the QR code from a phone. The platform buttons open the upload pages but I haven't posted anything with them.
 

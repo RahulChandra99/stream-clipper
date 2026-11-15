@@ -23,7 +23,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 
-from . import pipeline
+from . import pipeline, tts
 from .render import STYLES
 
 PROJECTS = pipeline.ROOT / "projects"
@@ -31,7 +31,8 @@ UPLOADS = PROJECTS / "_uploads"
 WEB = Path(__file__).parent / "web"
 PORT = 8787
 EDITABLE = {"title", "caption", "start", "end", "style", "layout", "title_mode",
-            "progress_bar", "music", "music_vol", "edits", "credit"}
+            "progress_bar", "music", "music_vol", "edits", "credit",
+            "vo_text", "vo_voice", "vo_start", "vo_vol", "vo_duck", "vo_captions"}
 
 app = FastAPI(title="stream-clipper")
 lock = threading.RLock()
@@ -161,7 +162,8 @@ def config() -> dict:
     tracks = sorted(f.name for f in pipeline.MUSIC.iterdir()
                     if f.suffix.lower() in {".mp3", ".m4a", ".wav", ".aac", ".ogg"})
     return {"styles": {k: v["label"] for k, v in STYLES.items()}, "music": tracks,
-            "music_dir": str(pipeline.MUSIC), "claude": bool(shutil.which("claude"))}
+            "music_dir": str(pipeline.MUSIC), "claude": bool(shutil.which("claude")),
+            "voices": tts.voices()}
 
 
 @app.get("/api/projects")
@@ -270,6 +272,21 @@ def delete_clip(pid: str, cid: str) -> dict:
     for f in pdir(pid).glob(f"{cid}_v*.mp4"):
         f.unlink()
     return {"ok": True}
+
+
+@app.post("/api/tts")
+async def tts_preview(req: Request):
+    """Speak some text so the voice can be heard before rendering."""
+    body = await req.json()
+    try:
+        wav = tts.synthesize(str(body.get("text", ""))[:3000], str(body.get("voice", "")),
+                             pipeline.WORK / "voice")
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(400, str(e))
+    except subprocess.SubprocessError:
+        raise HTTPException(500, "The voice could not be generated")
+    return FileResponse(wav, media_type="audio/wav",
+                        headers={"X-Duration": f"{tts.duration(wav):.2f}"})
 
 
 @app.get("/media/{pid}/{name}")

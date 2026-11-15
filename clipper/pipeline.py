@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import fetch, pick, render, signals, transcribe
+from . import fetch, pick, render, signals, transcribe, tts
 
 ROOT = Path(__file__).resolve().parent.parent
 WORK = ROOT / "work"
@@ -13,7 +13,9 @@ MUSIC = ROOT / "music"
 PAD = 12.0  # extra seconds downloaded each side so trims don't need a new download
 
 CLIP_DEFAULTS = {"style": "bold", "layout": "auto", "title_mode": "always",
-                 "progress_bar": False, "music": None, "music_vol": 0.15}
+                 "progress_bar": False, "music": None, "music_vol": 0.15,
+                 "vo_text": "", "vo_voice": tts.DEFAULT_VOICE, "vo_start": 0.0,
+                 "vo_vol": 1.0, "vo_duck": 0.2, "vo_captions": True}
 
 
 def work_dir(meta: dict) -> Path:
@@ -109,6 +111,25 @@ def credit_text(meta: dict, clip: dict) -> str:
     return f"clip: {meta['channel']}" if meta.get("channel") else ""
 
 
+def voiceover(clip: dict, clip_len: float) -> dict | None:
+    """Generate the voiceover audio for a clip, if it has any text."""
+    text = (clip.get("vo_text") or "").strip()
+    if not text:
+        return None
+    wav = tts.synthesize(text, clip.get("vo_voice") or tts.DEFAULT_VOICE, WORK / "voice")
+    start = min(max(0.0, float(clip.get("vo_start", 0))), max(0.0, clip_len - 1))
+    length = min(tts.duration(wav), clip_len - start)
+    return {"file": wav, "start": start, "length": length, "text": text,
+            "vol": float(clip.get("vo_vol", 1.0)), "duck": float(clip.get("vo_duck", 0.2))}
+
+
+def captions_with_voiceover(words: list[dict], vo: dict) -> list[dict]:
+    """Swap the streamer's captions for the voiceover's words while the voice speaks."""
+    a, b = vo["start"], vo["start"] + vo["length"]
+    kept = [w for w in words if w["end"] <= a or w["start"] >= b]
+    return sorted(kept + tts.spread_words(vo["text"], a, vo["length"]), key=lambda w: w["start"])
+
+
 def render_clip(meta: dict, clip: dict, all_words: list[dict], out: Path,
                 on_progress=None) -> None:
     src, offset = ensure_source(meta, clip)
@@ -116,12 +137,16 @@ def render_clip(meta: dict, clip: dict, all_words: list[dict], out: Path,
     music = MUSIC / clip["music"] if clip.get("music") else None
     if music and not music.exists():
         music = None
+    words = clip_words(all_words, clip)
+    vo = voiceover(clip, t1 - t0)
+    if vo and clip.get("vo_captions", True):
+        words = captions_with_voiceover(words, vo)
     clip["layout_used"] = render.render(
-        src, out, clip_words(all_words, clip), clip["title"], credit_text(meta, clip),
+        src, out, words, clip["title"], credit_text(meta, clip),
         clip.get("layout", "auto"), ss=offset, dur=t1 - t0,
         style=clip.get("style", "bold"), title_mode=clip.get("title_mode", "always"),
         progress_bar=bool(clip.get("progress_bar")), music=music,
-        music_vol=float(clip.get("music_vol", 0.15)), on_progress=on_progress)
+        music_vol=float(clip.get("music_vol", 0.15)), vo=vo, on_progress=on_progress)
 
 
 def description(meta: dict, clip: dict) -> str:
